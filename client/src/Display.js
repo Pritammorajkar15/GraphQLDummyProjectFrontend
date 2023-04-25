@@ -1,7 +1,14 @@
 //  gql: function to parse the mutation string into a GraphQL document that you then pass to useMutation.
 // useLazyQuery: it does not immediately execute its associated query. Instead, it returns a query function in its result tuple that you call whenever you're ready to execute the query.
-import React, { useState } from "react";
-import { useQuery, useLazyQuery, gql, useMutation } from "@apollo/client";
+// subscriptions usually maintain a persistent connection,Apollo Client subscriptions most commonly communicate over WebSocket, via the graphql-ws library.
+import React, { useState, useMemo } from "react";
+import {
+  useQuery,
+  useLazyQuery,
+  gql,
+  useMutation,
+  useSubscription,
+} from "@apollo/client";
 
 const QUERY_ALL_USERS = gql`
   query GetAllUsers {
@@ -41,6 +48,18 @@ const CREATE_USER_MUTATION = gql`
   }
 `;
 
+const USER_ADDED_SUBSCRIPTION = gql`
+  subscription {
+    userAdded {
+      id
+      name
+      age
+      username
+      nationality
+    }
+  }
+`;
+
 function DisplayData() {
   const [movieSearched, setMovieSearched] = useState("");
 
@@ -52,8 +71,22 @@ function DisplayData() {
 
   const { data, loading, refetch } = useQuery(QUERY_ALL_USERS);
   const { data: movieData } = useQuery(QUERY_ALL_MOVIES);
+  const { data: subscriptionData } = useSubscription(USER_ADDED_SUBSCRIPTION);
+
   const [fetchMovie, { data: movieSearchedData, error: movieError }] =
     useLazyQuery(GET_MOVIE_BY_NAME);
+
+  const memoizedUserData = useMemo(() => {
+    if (subscriptionData) {
+      return [...data.users, subscriptionData.userAdded]; // Merge the subscription data with the query data
+    }
+    return data;
+  }, [data, subscriptionData]);
+  const memoizedMovieData = useMemo(() => movieData, [movieData]);
+  const memoizedMovieSearchedData = useMemo(
+    () => movieSearchedData,
+    [movieSearchedData]
+  );
 
   const [createUser] = useMutation(CREATE_USER_MUTATION);
 
@@ -106,8 +139,8 @@ function DisplayData() {
           Create User
         </button>
       </div>
-      {data &&
-        data.users.map((user) => {
+      {memoizedUserData &&
+        memoizedUserData.users.map((user) => {
           return (
             <div>
               <h1>Name: {user.name}</h1>
@@ -118,8 +151,8 @@ function DisplayData() {
           );
         })}
 
-      {movieData &&
-        movieData.movies.map((movie) => {
+      {memoizedMovieData &&
+        memoizedMovieData.movies.map((movie) => {
           return <h1>Movie Name: {movie.name}</h1>;
         })}
 
@@ -143,11 +176,12 @@ function DisplayData() {
           Fetch Data
         </button>
         <div>
-          {movieSearchedData && (
+          {memoizedMovieSearchedData && (
             <div>
-              <h1>MovieName: {movieSearchedData.movie.name}</h1>
+              <h1>MovieName: {memoizedMovieSearchedData.movie.name}</h1>
               <h1>
-                Year Of Publication: {movieSearchedData.movie.yearOfPublication}
+                Year Of Publication:{" "}
+                {memoizedMovieSearchedData.movie.yearOfPublication}
               </h1>{" "}
             </div>
           )}
